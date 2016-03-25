@@ -1,5 +1,15 @@
+################################################################################
+# Dependencies: ../bastion
+################################################################################
+
+################################################################################
+# Variables
+################################################################################
+
 variable "account" {}
+variable "authorised_cidr" {}
 variable "env" {}
+variable "base_ami" {}
 variable "cidr_octet_1" {
     default = 10
 }
@@ -61,7 +71,6 @@ resource "aws_route_table" "public" {
     }
 }
 
-
 ################################################################################
 # Public Subnets
 ################################################################################
@@ -70,6 +79,7 @@ resource "aws_route_table" "public" {
 # gateway. The only machines we should put into that DMZ subnet should be our
 # bastion VPN server and / or a NAT server configured to allow machines in other
 # subnets to get access out to the internet.  ELBs as well perhaps?
+#
 resource "aws_subnet" "public" {
     vpc_id = "${aws_vpc.main.id}"
     cidr_block = "${cidrsubnet("${var.cidr_octet_1}.${var.cidr_octet_2}.1.0/16", 8, count.index)}"
@@ -83,12 +93,12 @@ resource "aws_subnet" "public" {
 
 # We associate the public route table with our public subnets, meaning only these
 # subnets will be able to communicate directly with the internet
+#
 resource "aws_route_table_association" "public" {
     subnet_id = "${element(aws_subnet.public.*.id, count.index)}"
     route_table_id = "${aws_route_table.public.id}"
     count = "${length(split(",",var.zones))}"
 }
-
 
 ################################################################################
 # NAT Gateways
@@ -96,7 +106,7 @@ resource "aws_route_table_association" "public" {
 
 # We launch a nat gateway in each of the public subnets so that (if desired) 
 # private subnets can route out to the internet via these gateways
-
+#
 resource "aws_eip" "nat" {
   count = "${length(split(",",var.zones))}"
   vpc = true
@@ -109,7 +119,6 @@ resource "aws_nat_gateway" "nat" {
   depends_on = ["aws_internet_gateway.main"]
 }
 
-
 ################################################################################
 # Private Route Tables
 ################################################################################
@@ -117,7 +126,7 @@ resource "aws_nat_gateway" "nat" {
 # we need one private route table per AZ since each will route internet traffic
 # through a separate NAT gateway also associated with that AZ to ensure we 
 # maintain connectivity if a single AZ goes down
-
+#
 resource "aws_route_table" "private" {
   count = "${length(split(",",var.zones))}"
   vpc_id = "${aws_vpc.main.id}"
@@ -130,4 +139,31 @@ resource "aws_route_table" "private" {
     CostCode = "${var.account}-${var.env}"
   }
 }
+
+
+################################################################################
+# Bastion Hosts
+################################################################################
+
+module "bastion" {
+    source         = "../bastion"
+    vpc_id   = "${aws_vpc.main.id}"
+    base_ami = "${var.base_ami}"
+    account  = "${var.account}"
+    env      = "${var.env}"
+    # To minimise the attack surface (and reduce cost) we create only one bastion
+    zones = "${element(split(",",var.zones),0)}"
+    # If you want a bastion per zone:
+    # zones = "${var.zones}"
+    public_subnets = "${join(",",aws_subnet.public.*.id)}" 
+    authorised_cidr = "${var.authorised_cidr}"
+}
+
+################################################################################
+# Outputs
+################################################################################
+
+output "id" {value = "${aws_vpc.main.id}"}
+output "public_subnets" {value = "${join(",",aws_subnet.public.*.id)}"}
 output "private_routetables" {value = "${join(",",aws_route_table.private.*.id)}"}
+output "bastion_sg" {value = "${module.bastion.sg}"}
