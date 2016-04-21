@@ -42,6 +42,9 @@ resource "aws_security_group" "outbound" {
 ################################################################################
 # Bastion instances
 ################################################################################
+resource "template_file" "cloud_config" {
+    template = "${file("${path.module}/cloud-config")}"
+}
 
 resource "aws_instance" "bastion" {
   ami = "${var.base_ami}"
@@ -49,6 +52,7 @@ resource "aws_instance" "bastion" {
   instance_type = "${var.instance_type}"
   key_name = "${var.account}-${var.env}-bootstrap"
   subnet_id = "${element(split(",",var.public_subnets),count.index)}"
+  user_data = "${template_file.cloud_config.rendered}"
   vpc_security_group_ids = [
     "${aws_security_group.inbound.id}",
     "${aws_security_group.outbound.id}"
@@ -59,34 +63,10 @@ resource "aws_instance" "bastion" {
     Ansible = "bastion"
     Limit = "${var.account}_${var.env}_bastion"
   }
-  user_data = <<EOF
-#cloud-config
 
-write_files:
-  - path: /etc/ssh/sshd_config
-    permissions: 0600
-    owner: root:root
-    content: |
-      # Use most defaults for sshd configuration.
-      UsePrivilegeSeparation sandbox
-      Subsystem sftp internal-sftp
-
-      PermitRootLogin no
-      AllowUsers core
-      PasswordAuthentication no
-      ChallengeResponseAuthentication no
-      
-coreos:
-  update:
-    reboot-strategy: best-effort
-  units:
-  - name: sshd.socket
-    command: restart
-    content: |
-      [Socket]
-      ListenStream=6042
-      Accept=yes
-EOF
+  lifecycle {
+    ignore_changes = ["ami"]
+  }
 }
 
 resource "aws_eip" "bastion" {
