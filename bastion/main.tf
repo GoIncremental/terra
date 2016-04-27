@@ -45,6 +45,9 @@ resource "aws_security_group" "outbound" {
     Name       = "${var.account}-${var.env}-bastion-out"   
     CostCenter = "${var.account}-${var.env}"
   }
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 ################################################################################
