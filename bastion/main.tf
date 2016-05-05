@@ -1,17 +1,18 @@
-variable base_ami {}
-variable account {}
-variable env {}
-variable authorised_cidr {}
-variable public_subnets {}
-variable vpc_id {}
-variable instance_type {
+variable "base_ami" {}
+variable "account" {}
+variable "env" {}
+variable "cidr_block" {}
+variable "authorised_cidr" {}
+variable "public_subnets" {}
+variable "vpc_id" {}
+variable "instance_type" {
   default = "t2.micro"
 }
-variable zones {}
+variable "zones" {}
 variable flag {
   default = 0
 }
-variable security_groups {
+variable "security_groups" {
   default = ""
 }
 
@@ -47,6 +48,24 @@ resource "aws_security_group" "outbound" {
   }
   lifecycle {
     create_before_destroy = true
+  }
+  egress {
+    protocol = "tcp"
+    from_port = 80
+    to_port = 80
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    protocol = "tcp"
+    from_port = 443
+    to_port = 443
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    protocol = "tcp"
+    from_port = 22
+    to_port = 22
+    cidr_blocks = ["${var.cidr_block}"]
   }
 }
 
