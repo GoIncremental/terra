@@ -22,11 +22,11 @@ variable "zones" {
 }
 
 variable "dns_support" {
-    default = false
+    default = true
 }
 variable "dns_hostnames" {
     default = false
-}
+}  
 
 ################################################################################
 # VPC
@@ -141,23 +141,6 @@ resource "aws_route_table" "private" {
 }
 
 
-################################################################################
-# Bastion Hosts
-################################################################################
-
-module "bastion" {
-    source         = "../bastion"
-    vpc_id   = "${aws_vpc.main.id}"
-    base_ami = "${var.base_ami}"
-    account  = "${var.account}"
-    env      = "${var.env}"
-    # To minimise the attack surface (and reduce cost) we create only one bastion
-    zones = "${element(split(",",var.zones),0)}"
-    # If you want a bastion per zone:
-    # zones = "${var.zones}"
-    public_subnets = "${join(",",aws_subnet.public.*.id)}" 
-    authorised_cidr = "${var.authorised_cidr}"
-}
 
 ################################################################################
 # Outputs
@@ -166,4 +149,4 @@ module "bastion" {
 output "id" {value = "${aws_vpc.main.id}"}
 output "public_subnets" {value = "${join(",",aws_subnet.public.*.id)}"}
 output "private_routetables" {value = "${join(",",aws_route_table.private.*.id)}"}
-output "bastion_sg" {value = "${module.bastion.sg}"}
+output "cidr_block" {value = "${aws_vpc.main.cidr_block}"}

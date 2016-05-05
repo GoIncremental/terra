@@ -1,13 +1,20 @@
-variable base_ami {}
-variable account {}
-variable env {}
-variable authorised_cidr {}
-variable public_subnets {}
-variable vpc_id {}
-variable instance_type {
+variable "base_ami" {}
+variable "account" {}
+variable "env" {}
+variable "cidr_block" {}
+variable "authorised_cidr" {}
+variable "public_subnets" {}
+variable "vpc_id" {}
+variable "instance_type" {
   default = "t2.micro"
 }
-variable zones {}
+variable "zones" {}
+variable flag {
+  default = 0
+}
+variable "security_groups" {
+  default = ""
+}
 
 ################################################################################
 # Security Groups
@@ -16,6 +23,7 @@ variable zones {}
 resource "aws_security_group" "inbound" {
   name = "${var.account}-${var.env}-bastion-in"
   description = "Inbound rules for bastion hosts"
+  count = "${var.flag}"
   vpc_id = "${var.vpc_id}"
   tags = {
     Name       = "${var.account}-${var.env}-bastion-in"   
@@ -32,10 +40,32 @@ resource "aws_security_group" "inbound" {
 resource "aws_security_group" "outbound" {
   name = "${var.account}-${var.env}-bastion-out"
   description = "Refer to this group if you wish to accept traffic from the bastion"
+  count = "${var.flag}"
   vpc_id = "${var.vpc_id}"
   tags = {
     Name       = "${var.account}-${var.env}-bastion-out"   
     CostCenter = "${var.account}-${var.env}"
+  }
+  lifecycle {
+    create_before_destroy = true
+  }
+  egress {
+    protocol = "tcp"
+    from_port = 80
+    to_port = 80
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    protocol = "tcp"
+    from_port = 443
+    to_port = 443
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    protocol = "tcp"
+    from_port = 22
+    to_port = 22
+    cidr_blocks = ["${var.cidr_block}"]
   }
 }
 
@@ -48,14 +78,15 @@ resource "template_file" "cloud_config" {
 
 resource "aws_instance" "bastion" {
   ami = "${var.base_ami}"
-  count = "${length(split(",",var.zones))}"
+  count = "${length(split(",",var.zones)) * var.flag}"
   instance_type = "${var.instance_type}"
   key_name = "${var.account}-${var.env}-bootstrap"
   subnet_id = "${element(split(",",var.public_subnets),count.index)}"
   user_data = "${template_file.cloud_config.rendered}"
   vpc_security_group_ids = [
     "${aws_security_group.inbound.id}",
-    "${aws_security_group.outbound.id}"
+    "${aws_security_group.outbound.id}", 
+    "${compact(split(",", var.security_groups ))}"
   ]
   tags {
     Name = "${var.account}-${var.env}-bastion${format("%02d",count.index + 1)}"
@@ -70,7 +101,7 @@ resource "aws_instance" "bastion" {
 }
 
 resource "aws_eip" "bastion" {
-  count = "${length(split(",",var.zones))}"
+  count = "${length(split(",",var.zones)) * var.flag}"
   instance = "${element(aws_instance.bastion.*.id, count.index)}"
   vpc = true
 }
