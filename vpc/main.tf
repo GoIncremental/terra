@@ -22,7 +22,7 @@ variable "zones" {
 }
 
 variable "dns_support" {
-    default = false
+    default = true
 }
 variable "dns_hostnames" {
     default = false
